@@ -12,7 +12,7 @@ import {
   Title,
 } from '@mantine/core';
 import { IconSend, IconRobot } from '@tabler/icons-react';
-import { supabase } from '../utils/supabase';
+import { useChat } from '../hooks/useChat';
 
 function WheelLogo({ size = 18 }) {
   return (
@@ -43,7 +43,8 @@ const GREETING = {
 export function ChatPanel({ onList }) {
   const [messages, setMessages] = useState([GREETING]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const chat = useChat();
+  const loading = chat.isPending;
   const viewport = useRef(null);
 
   useEffect(() => {
@@ -59,13 +60,9 @@ export function ChatPanel({ onList }) {
     setInput('');
     const history = messages.map((m) => ({ role: m.role, text: m.text }));
     setMessages((m) => [...m, { role: 'user', text: prompt }]);
-    setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('chat', {
-        body: { prompt, history },
-      });
-      if (error) throw error;
+      const data = await chat.mutateAsync({ prompt, history });
 
       const botText =
         data?.message ||
@@ -92,8 +89,6 @@ export function ChatPanel({ onList }) {
           }`,
         },
       ]);
-    } finally {
-      setLoading(false);
     }
   };
 

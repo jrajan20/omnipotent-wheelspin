@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import {
   Container,
   Title,
@@ -16,37 +16,32 @@ import { IconTrash, IconExternalLink, IconMoodEmpty } from '@tabler/icons-react'
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchMyWheels, deleteWheel } from '../utils/wheels';
+import { useMyWheels, useDeleteWheel } from '../hooks/useWheels';
 
 export function Dashboard() {
   const { user, loading: authLoading } = useAuth();
-  const [wheels, setWheels] = useState([]);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      navigate('/');
-      return;
-    }
-    fetchMyWheels(user.id)
-      .then(setWheels)
-      .catch((e) => notifications.show({ color: 'red', message: e.message }))
-      .finally(() => setLoading(false));
+    if (!authLoading && !user) navigate('/');
   }, [user, authLoading, navigate]);
 
-  const remove = async (id) => {
-    try {
-      await deleteWheel(id);
-      setWheels((current) => current.filter((w) => w.id !== id));
-      notifications.show({ color: 'green', message: 'Wheel deleted.' });
-    } catch (e) {
-      notifications.show({ color: 'red', message: e.message });
-    }
+  const { data: wheels = [], isLoading, error } = useMyWheels(user?.id);
+  const deleteWheel = useDeleteWheel();
+
+  useEffect(() => {
+    if (error) notifications.show({ color: 'red', message: error.message });
+  }, [error]);
+
+  const remove = (id) => {
+    deleteWheel.mutate(id, {
+      onSuccess: () =>
+        notifications.show({ color: 'green', message: 'Wheel deleted.' }),
+      onError: (e) => notifications.show({ color: 'red', message: e.message }),
+    });
   };
 
-  if (authLoading || loading) {
+  if (authLoading || isLoading) {
     return (
       <Center h={300}>
         <Loader color="grape" />

@@ -13,7 +13,8 @@ import { ItemList } from '../components/ItemList';
 import { WheelCanvas } from '../components/WheelCanvas';
 import { AuthModal } from '../components/AuthModal';
 import { useAuth } from '../auth/AuthProvider';
-import { itemsFromLabels, saveWheel, setWheelPublic } from '../utils/wheels';
+import { itemsFromLabels } from '../utils/wheels';
+import { useSaveWheel, useSetWheelPublic } from '../hooks/useWheels';
 
 export function Builder() {
   const { user } = useAuth();
@@ -21,8 +22,10 @@ export function Builder() {
   const [items, setItems] = useState([]);
   const [wheelId, setWheelId] = useState(null);
   const [shareId, setShareId] = useState(null);
-  const [saving, setSaving] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
+  const saveMutation = useSaveWheel();
+  const publicMutation = useSetWheelPublic();
+  const saving = saveMutation.isPending || publicMutation.isPending;
 
   const handleList = ({ title: nextTitle, labels }) => {
     if (nextTitle && !title.trim()) setTitle(nextTitle);
@@ -51,9 +54,8 @@ export function Builder() {
   const handleSave = async () => {
     if (!user) return setAuthOpen(true);
     if (!requireReady()) return;
-    setSaving(true);
     try {
-      const saved = await saveWheel({
+      const saved = await saveMutation.mutateAsync({
         id: wheelId,
         title: title.trim(),
         options: items,
@@ -64,19 +66,16 @@ export function Builder() {
       notifications.show({ color: 'green', message: 'Wheel saved to your profile.' });
     } catch (e) {
       notifications.show({ color: 'red', title: 'Save failed', message: e.message });
-    } finally {
-      setSaving(false);
     }
   };
 
   const handleShare = async () => {
     if (!user) return setAuthOpen(true);
     if (!requireReady()) return;
-    setSaving(true);
     try {
       let saved;
       if (!wheelId) {
-        saved = await saveWheel({
+        saved = await saveMutation.mutateAsync({
           title: title.trim(),
           options: items,
           isPublic: true,
@@ -84,7 +83,7 @@ export function Builder() {
         });
         setWheelId(saved.id);
       } else {
-        saved = await setWheelPublic(wheelId, true);
+        saved = await publicMutation.mutateAsync({ id: wheelId, isPublic: true });
       }
       setShareId(saved.share_id);
       const link = `${window.location.origin}/w/${saved.share_id}`;
@@ -96,8 +95,6 @@ export function Builder() {
       });
     } catch (e) {
       notifications.show({ color: 'red', title: 'Share failed', message: e.message });
-    } finally {
-      setSaving(false);
     }
   };
 

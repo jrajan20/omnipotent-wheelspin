@@ -8,34 +8,29 @@ import {
   Stack,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { supabase } from '../utils/supabase';
+import { useSignIn, useSignUp } from '../hooks/useAuthMutations';
 
 export function AuthModal({ opened, onClose }) {
   const [tab, setTab] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
-  const [loading, setLoading] = useState(false);
+  const signIn = useSignIn();
+  const signUp = useSignUp();
+  const loading = signIn.isPending || signUp.isPending;
 
   const submit = async () => {
     if (!email || !password) {
       notifications.show({ color: 'yellow', message: 'Email and password are required.' });
       return;
     }
-    setLoading(true);
     try {
       if (tab === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        await signIn.mutateAsync({ email, password });
         notifications.show({ color: 'green', message: 'Welcome back!' });
         onClose();
       } else {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { data: { username } },
-        });
-        if (error) throw error;
+        await signUp.mutateAsync({ email, password, username });
         notifications.show({
           color: 'green',
           title: 'Account created',
@@ -49,8 +44,6 @@ export function AuthModal({ opened, onClose }) {
         title: 'Authentication failed',
         message: e.message,
       });
-    } finally {
-      setLoading(false);
     }
   };
 

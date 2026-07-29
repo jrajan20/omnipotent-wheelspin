@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   Container,
   Title,
@@ -11,23 +10,14 @@ import {
 } from '@mantine/core';
 import { useParams } from 'react-router-dom';
 import { WheelCanvas } from '../components/WheelCanvas';
-import { fetchSharedWheel, incrementSpinCount } from '../utils/wheels';
+import { useSharedWheel, useIncrementSpinCount } from '../hooks/useWheels';
 
 export function SharedWheel() {
   const { shareId } = useParams();
-  const [wheel, setWheel] = useState(null);
-  const [status, setStatus] = useState('loading');
+  const { data: wheel, isLoading, isError } = useSharedWheel(shareId);
+  const incrementSpin = useIncrementSpinCount();
 
-  useEffect(() => {
-    fetchSharedWheel(shareId)
-      .then((data) => {
-        setWheel(data);
-        setStatus('ready');
-      })
-      .catch(() => setStatus('error'));
-  }, [shareId]);
-
-  if (status === 'loading') {
+  if (isLoading) {
     return (
       <Center h={300}>
         <Loader color="grape" />
@@ -35,7 +25,7 @@ export function SharedWheel() {
     );
   }
 
-  if (status === 'error') {
+  if (isError || !wheel) {
     return (
       <Center h={300}>
         <Text c="dimmed">This wheel doesn&apos;t exist or isn&apos;t shared.</Text>
@@ -56,7 +46,9 @@ export function SharedWheel() {
       <Paper withBorder radius="lg" p="lg">
         <WheelCanvas
           items={wheel.options ?? []}
-          onSpinEnd={() => incrementSpinCount(wheel.id, wheel.spin_count)}
+          onSpinEnd={() =>
+            incrementSpin.mutate({ id: wheel.id, current: wheel.spin_count })
+          }
         />
       </Paper>
     </Container>
