@@ -12,11 +12,11 @@ import {
   Center,
   Loader,
 } from '@mantine/core';
-import { IconTrash, IconExternalLink, IconMoodEmpty } from '@tabler/icons-react';
+import { IconTrash, IconShare, IconMoodEmpty } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '../auth/AuthProvider';
-import { useMyWheels, useDeleteWheel } from '../hooks/useWheels';
+import { useMyWheels, useDeleteWheel, useSetWheelPublic } from '../hooks/useWheels';
 
 export function Dashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -28,6 +28,7 @@ export function Dashboard() {
 
   const { data: wheels = [], isLoading, error } = useMyWheels(user?.id);
   const deleteWheel = useDeleteWheel();
+  const setPublic = useSetWheelPublic();
 
   useEffect(() => {
     if (error) notifications.show({ color: 'red', message: error.message });
@@ -39,6 +40,39 @@ export function Dashboard() {
         notifications.show({ color: 'green', message: 'Wheel deleted.' }),
       onError: (e) => notifications.show({ color: 'red', message: e.message }),
     });
+  };
+
+  // A wheel is only reachable through its share link once it is public, so make
+  // sure it is shareable before opening or copying the link.
+  const ensureShareable = (wheel) =>
+    wheel.is_public
+      ? Promise.resolve(wheel)
+      : setPublic.mutateAsync({ id: wheel.id, isPublic: true });
+
+  // Open a saved wheel through its public share link.
+  const openWheel = async (wheel) => {
+    try {
+      const shared = await ensureShareable(wheel);
+      navigate(`/w/${shared.share_id}`);
+    } catch (e) {
+      notifications.show({ color: 'red', message: e.message });
+    }
+  };
+
+  // Make a wheel shareable and copy its share link to the clipboard.
+  const copyLink = async (wheel) => {
+    try {
+      const shared = await ensureShareable(wheel);
+      const link = `${window.location.origin}/w/${shared.share_id}`;
+      await navigator.clipboard.writeText(link).catch(() => {});
+      notifications.show({
+        color: 'grape',
+        title: 'Share link copied!',
+        message: link,
+      });
+    } catch (e) {
+      notifications.show({ color: 'red', message: e.message });
+    }
   };
 
   if (authLoading || isLoading) {
@@ -68,7 +102,14 @@ export function Dashboard() {
       ) : (
         <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
           {wheels.map((wheel) => (
-            <Card key={wheel.id} withBorder radius="lg" shadow="sm">
+            <Card
+              key={wheel.id}
+              withBorder
+              radius="lg"
+              shadow="sm"
+              onClick={() => openWheel(wheel)}
+              style={{ cursor: 'pointer' }}
+            >
               <Group justify="space-between" mb="xs">
                 <Text fw={600} lineClamp={1}>
                   {wheel.title}
@@ -83,22 +124,27 @@ export function Dashboard() {
                 {wheel.options?.length ?? 0} options · {wheel.spin_count ?? 0} spins
               </Text>
               <Group mt="md" gap="xs">
-                {wheel.is_public && (
-                  <Button
-                    size="xs"
-                    variant="light"
-                    leftSection={<IconExternalLink size={14} />}
-                    onClick={() => window.open(`/w/${wheel.share_id}`, '_blank')}
-                  >
-                    Open link
-                  </Button>
-                )}
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="grape"
+                  leftSection={<IconShare size={14} />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyLink(wheel);
+                  }}
+                >
+                  Copy link
+                </Button>
                 <Button
                   size="xs"
                   variant="subtle"
                   color="red"
                   leftSection={<IconTrash size={14} />}
-                  onClick={() => remove(wheel.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(wheel.id);
+                  }}
                 >
                   Delete
                 </Button>

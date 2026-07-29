@@ -35,6 +35,12 @@ export function WheelCanvas({ items, onSpinEnd }) {
     onSpinEnd?.(result);
   };
 
+  const handleSpinAgain = () => {
+    setWinner(null);
+    setPrizeNumber(Math.floor(Math.random() * items.length));
+    setMustSpin(true);
+  };
+
   return (
     <Stack align="center" gap="md">
       {items.length >= 2 ? (
@@ -51,6 +57,7 @@ export function WheelCanvas({ items, onSpinEnd }) {
           radiusLineWidth={1}
           fontSize={14}
           textDistance={62}
+          pointerProps={{ style: { width: '13%', right: '12px', top: '12px' } }}
         />
       ) : (
         <Center
@@ -98,7 +105,7 @@ export function WheelCanvas({ items, onSpinEnd }) {
             </Title>
             <Button
               mt="sm"
-              onClick={() => setWinner(null)}
+              onClick={handleSpinAgain}
               variant="light"
               color="grape"
             >

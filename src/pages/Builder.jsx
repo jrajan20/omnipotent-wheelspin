@@ -28,7 +28,7 @@ export function Builder() {
   const saving = saveMutation.isPending || publicMutation.isPending;
 
   const handleList = ({ title: nextTitle, labels }) => {
-    if (nextTitle && !title.trim()) setTitle(nextTitle);
+    if (nextTitle) setTitle(nextTitle);
     setItems(itemsFromLabels(labels));
     setWheelId(null);
     setShareId(null);

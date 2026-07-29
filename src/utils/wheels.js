@@ -1,37 +1,54 @@
 import { supabase } from './supabase';
 
-// Palette used to color wheel slices. Distinct, high-contrast hues.
-export const WHEEL_COLORS = [
-  '#7048e8',
-  '#f76707',
-  '#0ca678',
-  '#e64980',
-  '#1c7ed6',
-  '#f59f00',
-  '#ae3ec9',
-  '#37b24d',
-  '#f03e3e',
-  '#1098ad',
-];
-
-export function colorForIndex(index) {
-  return WHEEL_COLORS[index % WHEEL_COLORS.length];
+// Slice colors are generated on the fly (HSL) instead of drawn from a fixed
+// palette, so a wheel can have any number of options. Each new color is chosen
+// at random but kept as distinct as possible from the colors already in use.
+function hueFromColor(color) {
+  const match = /hsl\(\s*(\d+(?:\.\d+)?)/i.exec(color ?? '');
+  return match ? Number(match[1]) : null;
 }
 
-export function makeItem(label, index) {
+function hueDistance(a, b) {
+  const diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+// Pick a random hue kept as far as possible from the hues already used so no
+// two slices share a color.
+export function randomColor(usedColors = []) {
+  const usedHues = usedColors.map(hueFromColor).filter((hue) => hue !== null);
+  let bestHue = Math.floor(Math.random() * 360);
+  if (usedHues.length) {
+    let bestGap = -1;
+    for (let i = 0; i < 48; i += 1) {
+      const hue = Math.floor(Math.random() * 360);
+      const gap = Math.min(...usedHues.map((used) => hueDistance(used, hue)));
+      if (gap > bestGap) {
+        bestGap = gap;
+        bestHue = hue;
+      }
+    }
+  }
+  return `hsl(${bestHue} 68% 55%)`;
+}
+
+export function makeItem(label, usedColors = []) {
   return {
     id: crypto.randomUUID(),
     label: String(label).trim(),
-    color: colorForIndex(index),
+    color: randomColor(usedColors),
   };
 }
 
-// Turn a list of label strings into colored wheel items.
+// Turn a list of label strings into colored wheel items with distinct colors.
 export function itemsFromLabels(labels) {
-  return (labels ?? [])
-    .map((label) => String(label).trim())
-    .filter(Boolean)
-    .map((label, index) => makeItem(label, index));
+  const items = [];
+  for (const raw of labels ?? []) {
+    const label = String(raw).trim();
+    if (!label) continue;
+    items.push(makeItem(label, items.map((item) => item.color)));
+  }
+  return items;
 }
 
 export async function saveWheel({

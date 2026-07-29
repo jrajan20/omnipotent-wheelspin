@@ -22,7 +22,7 @@ export function ItemList({ items, onAdd, onRemove, onClear }) {
   const add = () => {
     const label = value.trim();
     if (!label) return;
-    onAdd(makeItem(label, items.length));
+    onAdd(makeItem(label, items.map((item) => item.color)));
     setValue('');
   };
 

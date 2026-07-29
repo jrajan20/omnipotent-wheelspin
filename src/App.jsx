@@ -7,7 +7,7 @@ import { SharedWheel } from './pages/SharedWheel';
 
 export default function App() {
   return (
-    <AppShell header={{ height: 64 }} padding="md">
+    <AppShell header={{ height: 52 }} padding="md">
       <AppShell.Header>
         <Navbar />
       </AppShell.Header>

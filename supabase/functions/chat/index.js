@@ -8,7 +8,10 @@
 // false and `message` explains why — the UI shows that message in the chat.
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-3.6-flash';
+const INTERACTIONS_URL =
+  'https://generativelanguage.googleapis.com/v1beta/interactions';
+const API_REVISION = '2026-05-20';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,7 +24,7 @@ const SYSTEM_PROMPT = `You are "Wheelspin Bot" for an app called Omnipotent Whee
 Your ONLY job is to turn a user's request into a list of concise, spinnable options for a prize wheel.
 
 Rules:
-- If the request implies a set of choices (e.g. "dinner ideas", "movies to watch", "team names"), produce 6-12 short options, each at most about 4 words.
+- If the request implies a set of choices (e.g. "dinner ideas", "movies to watch", "team names"), produce a list of short options, each at most about 4 words. Include as many relevant options as make sense for the topic.
 - If the request cannot reasonably become a list of options (e.g. "what's the weather?", "who are you?", a factual question, a greeting, or anything with a single answer), set canCreateWheel to false and briefly explain, in a friendly tone, that a wheelspin can't be created from that prompt. Suggest they try a topic like "dinner ideas".
 - Never produce unsafe, hateful, or explicit options.
 - The "title" should be a short name for the wheel (e.g. "Dinner Ideas").
@@ -32,6 +35,27 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Pull the model's final text (our JSON string) out of the Interactions API
+// `steps` timeline — the Interactions API has no `candidates` array.
+function outputTextFromInteraction(payload: {
+  steps?: Array<{
+    type?: string;
+    content?: Array<{ type?: string; text?: string }>;
+  }>;
+}) {
+  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i];
+    if (step?.type === 'model_output' && Array.isArray(step.content)) {
+      const part = step.content.find(
+        (c) => c?.type === 'text' && typeof c.text === 'string',
+      );
+      if (part?.text) return part.text;
+    }
+  }
+  return '{}';
 }
 
 Deno.serve(async (req) => {
@@ -54,23 +78,26 @@ Deno.serve(async (req) => {
       });
     }
 
-    const contents = [
-      ...history
-        .slice(-8)
-        .map((m: { role: string; text: string }) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: String(m.text ?? '') }],
-        })),
-      { role: 'user', parts: [{ text: prompt }] },
-    ];
+    // The Interactions API is stateless here: fold recent turns into one text
+    // input and keep the bot persona in `system_instruction`.
+    const transcript = (Array.isArray(history) ? history : [])
+      .slice(-8)
+      .map((m: { role: string; text: string }) => {
+        const speaker = m.role === 'assistant' ? 'Assistant' : 'User';
+        return `${speaker}: ${String(m.text ?? '').trim()}`;
+      })
+      .join('\n');
+    const input = transcript ? `${transcript}\nUser: ${prompt}` : prompt;
 
     const requestBody = {
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents,
-      generationConfig: {
-        temperature: 0.9,
-        responseMimeType: 'application/json',
-        responseSchema: {
+      model: MODEL,
+      system_instruction: SYSTEM_PROMPT,
+      input,
+      store: false,
+      response_format: {
+        type: 'text',
+        mime_type: 'application/json',
+        schema: {
           type: 'object',
           properties: {
             canCreateWheel: { type: 'boolean' },
@@ -83,14 +110,15 @@ Deno.serve(async (req) => {
       },
     };
 
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+    const res = await fetch(INTERACTIONS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+        'Api-Revision': API_REVISION,
       },
-    );
+      body: JSON.stringify(requestBody),
+    });
 
     if (res.status === 429) {
       return jsonResponse({
@@ -106,15 +134,13 @@ Deno.serve(async (req) => {
     }
 
     const payload = await res.json();
-    const text =
-      payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+    const text = outputTextFromInteraction(payload);
     const parsed = JSON.parse(text);
 
     const items = Array.isArray(parsed.items)
       ? parsed.items
           .map((s: unknown) => String(s).trim())
           .filter(Boolean)
-          .slice(0, 12)
       : [];
     const canCreateWheel = Boolean(parsed.canCreateWheel) && items.length >= 2;
 
