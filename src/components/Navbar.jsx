@@ -41,7 +41,7 @@ export function Navbar() {
       <Group gap={{ base: 4, sm: 'sm' }} wrap="nowrap">
         <ActionIcon
           variant="subtle"
-          size={{ base: 'sm', sm: 'lg' }}
+          size={isMobile ? 'sm' : 'lg'}
           onClick={toggleColorScheme}
           aria-label="Toggle color scheme"
         >
@@ -55,7 +55,7 @@ export function Navbar() {
             <Menu.Target>
               <Avatar
                 radius="xl"
-                size={{ base: 'sm', sm: 'md' }}
+                size={isMobile ? 'sm' : 'md'}
                 color="grape"
                 style={{ cursor: 'pointer' }}
               >
@@ -83,7 +83,7 @@ export function Navbar() {
           <Button
             variant="gradient"
             gradient={{ from: 'grape', to: 'indigo' }}
-            size={{ base: 'xs', sm: 'sm', md: 'md' }}
+            size={isMobile ? 'xs' : 'sm'}
             onClick={() => setAuthOpen(true)}
           >
             Sign in
