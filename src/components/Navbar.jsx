@@ -14,11 +14,11 @@ import {
   IconSun,
   IconLogout,
   IconLayoutGrid,
-  IconSparkles,
 } from '@tabler/icons-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { AuthModal } from './AuthModal';
+import { Logo } from './Logo';
 
 export function Navbar() {
   const { user, signOut } = useAuth();
@@ -31,7 +31,7 @@ export function Navbar() {
     <Group h="100%" px={{ base: 'xs', sm: 'md' }} justify="space-between" wrap="nowrap">
       <Link to="/" style={{ textDecoration: 'none', minWidth: 0 }}>
         <Group gap={{ base: 4, sm: 'xs' }} wrap="nowrap">
-          <IconSparkles size={isMobile ? 18 : 26} color="var(--mantine-color-grape-5)" />
+          <Logo size={isMobile ? 22 : 32} />
           <Title order={3} fz={{ base: 'sm', xs: 'md', sm: 'xl' }} c="grape.4" style={{ whiteSpace: 'nowrap' }}>
             Omnipotent Wheelspin
           </Title>
