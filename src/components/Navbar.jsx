@@ -8,6 +8,7 @@ import {
   ActionIcon,
   useMantineColorScheme,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import {
   IconMoon,
   IconSun,
@@ -24,32 +25,40 @@ export function Navbar() {
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const [authOpen, setAuthOpen] = useState(false);
   const navigate = useNavigate();
+  const isMobile = useMediaQuery('(max-width: 480px)');
 
   return (
-    <Group h="100%" px="md" justify="space-between">
-      <Link to="/" style={{ textDecoration: 'none' }}>
-        <Group gap="xs" wrap="nowrap">
-          <IconSparkles size={26} color="var(--mantine-color-grape-5)" />
-          <Title order={3} c="grape.4">
+    <Group h="100%" px={{ base: 'xs', sm: 'md' }} justify="space-between" wrap="nowrap">
+      <Link to="/" style={{ textDecoration: 'none', minWidth: 0 }}>
+        <Group gap={{ base: 4, sm: 'xs' }} wrap="nowrap">
+          <IconSparkles size={isMobile ? 18 : 26} color="var(--mantine-color-grape-5)" />
+          <Title order={3} fz={{ base: 'sm', xs: 'md', sm: 'xl' }} c="grape.4" style={{ whiteSpace: 'nowrap' }}>
             Omnipotent Wheelspin
           </Title>
         </Group>
       </Link>
 
-      <Group>
+      <Group gap={{ base: 4, sm: 'sm' }} wrap="nowrap">
         <ActionIcon
           variant="subtle"
-          size="lg"
+          size={{ base: 'sm', sm: 'lg' }}
           onClick={toggleColorScheme}
           aria-label="Toggle color scheme"
         >
-          {colorScheme === 'dark' ? <IconSun size={20} /> : <IconMoon size={20} />}
+          {colorScheme === 'dark'
+            ? <IconSun size={isMobile ? 15 : 20} />
+            : <IconMoon size={isMobile ? 15 : 20} />}
         </ActionIcon>
 
         {user ? (
           <Menu shadow="md" width={210} position="bottom-end">
             <Menu.Target>
-              <Avatar radius="xl" color="grape" style={{ cursor: 'pointer' }}>
+              <Avatar
+                radius="xl"
+                size={{ base: 'sm', sm: 'md' }}
+                color="grape"
+                style={{ cursor: 'pointer' }}
+              >
                 {(user.email ?? '?')[0].toUpperCase()}
               </Avatar>
             </Menu.Target>
@@ -74,6 +83,7 @@ export function Navbar() {
           <Button
             variant="gradient"
             gradient={{ from: 'grape', to: 'indigo' }}
+            size={{ base: 'xs', sm: 'sm', md: 'md' }}
             onClick={() => setAuthOpen(true)}
           >
             Sign in
