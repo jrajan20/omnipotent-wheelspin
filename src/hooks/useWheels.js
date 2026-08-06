@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  decodeWheelFromHash,
   deleteWheel,
   fetchMyWheels,
   fetchSharedWheel,
@@ -66,5 +67,15 @@ export function useDeleteWheel() {
 export function useIncrementSpinCount() {
   return useMutation({
     mutationFn: ({ id, current }) => incrementSpinCount(id, current),
+  });
+}
+
+// Decode a wheel encoded in the URL hash (no Supabase, no auth required).
+export function useLocalWheel(hash) {
+  return useQuery({
+    queryKey: ['wheels', 'local', hash],
+    queryFn: () => decodeWheelFromHash(hash ?? ''),
+    enabled: !!hash,
+    staleTime: Infinity,
   });
 }
