@@ -13,7 +13,7 @@ import { ItemList } from '../components/ItemList';
 import { WheelCanvas } from '../components/WheelCanvas';
 import { AuthModal } from '../components/AuthModal';
 import { useAuth } from '../auth/AuthProvider';
-import { itemsFromLabels } from '../utils/wheels';
+import { encodeWheelToHash, itemsFromLabels } from '../utils/wheels';
 import { useSaveWheel, useSetWheelPublic } from '../hooks/useWheels';
 
 export function Builder() {
@@ -70,8 +70,21 @@ export function Builder() {
   };
 
   const handleShare = async () => {
-    if (!user) return setAuthOpen(true);
     if (!requireReady()) return;
+
+    // Unauthenticated: encode the wheel in the URL so no account is needed.
+    if (!user) {
+      const hash = encodeWheelToHash(title.trim(), items);
+      const link = `${window.location.origin}/w/local#${hash}`;
+      await navigator.clipboard.writeText(link).catch(() => {});
+      notifications.show({
+        color: 'grape',
+        title: 'Share link copied!',
+        message: 'Link copied to clipboard.',
+      });
+      return;
+    }
+
     try {
       let saved;
       if (!wheelId) {

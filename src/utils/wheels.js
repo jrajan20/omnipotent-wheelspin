@@ -129,3 +129,24 @@ export async function incrementSpinCount(id, current) {
     .update({ spin_count: (current ?? 0) + 1 })
     .eq('id', id);
 }
+
+// Encode wheel data (title + options) into a URL-safe base64 string for
+// client-side sharing that requires no account.
+export function encodeWheelToHash(title, options) {
+  const payload = JSON.stringify({ title, options });
+  return btoa(unescape(encodeURIComponent(payload)));
+}
+
+// Decode the hash produced by encodeWheelToHash. Returns null on failure.
+export function decodeWheelFromHash(hash) {
+  try {
+    const raw = hash.startsWith('#') ? hash.slice(1) : hash;
+    const payload = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    if (!payload || typeof payload.title !== 'string' || !Array.isArray(payload.options)) {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
