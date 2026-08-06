@@ -74,8 +74,11 @@ export function useIncrementSpinCount() {
 export function useLocalWheel(hash) {
   return useQuery({
     queryKey: ['wheels', 'local', hash],
-    queryFn: () => decodeWheelFromHash(hash ?? ''),
-    enabled: !!hash,
+    queryFn: () => {
+      const wheel = decodeWheelFromHash(hash ?? '');
+      if (!wheel) throw new Error('Invalid or missing wheel data in URL.');
+      return wheel;
+    },
     staleTime: Infinity,
   });
 }

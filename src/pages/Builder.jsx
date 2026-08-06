@@ -80,7 +80,7 @@ export function Builder() {
       notifications.show({
         color: 'grape',
         title: 'Share link copied!',
-        message: link,
+        message: 'Link copied to clipboard.',
       });
       return;
     }
