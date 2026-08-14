@@ -1,15 +1,20 @@
-import { AppShell, Alert, Text, Code } from '@mantine/core';
+import { AppShell, Alert, Text, Code, Anchor } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Link } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Builder } from './pages/Builder';
 import { Dashboard } from './pages/Dashboard';
 import { SharedWheel } from './pages/SharedWheel';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { supabaseConfigured } from './utils/supabase';
 
 export default function App() {
   return (
-    <AppShell header={{ height: { base: 48, sm: 52 } }} padding="md">
+    <AppShell
+      header={{ height: { base: 48, sm: 52 } }}
+      footer={{ height: 36 }}
+      padding="md"
+    >
       <AppShell.Header>
         <Navbar />
       </AppShell.Header>
@@ -32,8 +37,16 @@ export default function App() {
           <Route path="/" element={<Builder />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/w/:shareId" element={<SharedWheel />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
         </Routes>
       </AppShell.Main>
+      <AppShell.Footer p="xs" style={{ textAlign: 'center' }}>
+        <Text size="xs" c="dimmed">
+          <Anchor component={Link} to="/privacy" size="xs" c="dimmed">
+            Privacy Policy
+          </Anchor>
+        </Text>
+      </AppShell.Footer>
     </AppShell>
   );
 }

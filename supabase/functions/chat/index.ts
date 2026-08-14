@@ -27,6 +27,30 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Patterns that suggest the user may be in crisis.  When matched we respond
+// with crisis resources instead of forwarding the message to the AI model.
+const SELF_HARM_PATTERNS = [
+  /\b(suicide|suicidal)\b/i,
+  /\bkill (my|him|her|them)self\b/i,
+  /\bself[- ]?harm\b/i,
+  /\bself[- ]?injur/i,
+  /\bcut (my|him|her|them)self\b/i,
+  /\bend (my|his|her|their) life\b/i,
+  /\bwant to die\b/i,
+  /\b(hurt|harm) (my|him|her|them)self\b/i,
+];
+
+const CRISIS_RESPONSE = {
+  canCreateWheel: false,
+  title: '',
+  items: [],
+  message:
+    "It sounds like you may be going through something really difficult. " +
+    "Please reach out — you don't have to face this alone.\n\n" +
+    "🇺🇸 **988 Suicide & Crisis Lifeline** — call or text **988** (US, 24/7)\n" +
+    "🌍 **International resources** — https://www.befrienders.org",
+};
+
 const SYSTEM_PROMPT = `You are "Wheelspin Bot" for an app called Omnipotent Wheelspin.
 Your ONLY job is to turn a user's request into a list of concise, spinnable options for a prize wheel.
 
@@ -83,6 +107,11 @@ Deno.serve(async (req) => {
         items: [],
         message: 'Please type a topic to build a wheel from.',
       });
+    }
+
+    // Detect potential self-harm language before sending anything to the AI.
+    if (SELF_HARM_PATTERNS.some((re) => re.test(prompt))) {
+      return jsonResponse(CRISIS_RESPONSE);
     }
 
     // The Interactions API is stateless here: fold recent turns into one text
