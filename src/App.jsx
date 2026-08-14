@@ -3,7 +3,7 @@ import { IconAlertCircle } from '@tabler/icons-react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { Builder } from './pages/Builder';
-import { Dashboard } from './pages/Dashboard';
+import { ProfilePage } from './pages/Profile';
 import { SharedWheel } from './pages/SharedWheel';
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { supabaseConfigured } from './utils/supabase';
@@ -35,7 +35,7 @@ export default function App() {
         )}
         <Routes>
           <Route path="/" element={<Builder />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/w/:shareId" element={<SharedWheel />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
         </Routes>

@@ -13,20 +13,17 @@ import {
   IconMoon,
   IconSun,
   IconLogout,
-  IconLayoutGrid,
   IconUser,
 } from '@tabler/icons-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { AuthModal } from './AuthModal';
-import { ProfileModal } from './ProfileModal';
 import { Logo } from './Logo';
 
 export function Navbar() {
   const { user, signOut } = useAuth();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const [authOpen, setAuthOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
   const navigate = useNavigate();
   const isMobile = useMediaQuery('(max-width: 480px)');
 
@@ -69,15 +66,9 @@ export function Navbar() {
               <Menu.Label>{user.email}</Menu.Label>
               <Menu.Item
                 leftSection={<IconUser size={16} />}
-                onClick={() => setProfileOpen(true)}
+                onClick={() => navigate('/profile')}
               >
                 Profile
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconLayoutGrid size={16} />}
-                onClick={() => navigate('/dashboard')}
-              >
-                My wheels
               </Menu.Item>
               <Menu.Item
                 color="red"
@@ -101,7 +92,7 @@ export function Navbar() {
       </Group>
 
       <AuthModal opened={authOpen} onClose={() => setAuthOpen(false)} />
-      <ProfileModal opened={profileOpen} onClose={() => setProfileOpen(false)} />
     </Group>
   );
 }
+
