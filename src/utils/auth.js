@@ -20,3 +20,14 @@ export async function signUpWithPassword({ email, password, username }) {
   if (error) throw error;
   return data;
 }
+
+export async function changePassword({ password }) {
+  const { data, error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteAccount() {
+  const { error } = await supabase.functions.invoke('delete-account');
+  if (error) throw error;
+}
