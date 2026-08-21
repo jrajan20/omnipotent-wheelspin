@@ -19,10 +19,13 @@ export async function sendChatMessage({ prompt, history, onToken }) {
   const headers = {
     'Content-Type': 'application/json',
     apikey: supabaseKey,
+    // Supabase edge functions require an Authorization header. Fall back to the
+    // anon key when no authenticated session is present so unauthenticated users
+    // can still use the chatbot without getting a 401.
+    Authorization: session?.access_token
+      ? 'Bearer ' + session.access_token
+      : 'Bearer ' + supabaseKey,
   };
-  if (session?.access_token) {
-    headers['Authorization'] = 'Bearer ' + session.access_token;
-  }
 
   // Only send the last 8 turns — the edge function also caps at 8, but trimming
   // here reduces the network payload.
