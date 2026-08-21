@@ -1,9 +1,20 @@
-import { useMutation } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 import { sendChatMessage } from '../utils/chat';
 
-// Mutation: send a prompt to the Wheelspin Bot edge function.
+// Hook for streaming chat messages to the Wheelspin Bot edge function.
+// Returns { send, isPending } where `send` accepts { prompt, history, onToken }.
+// `onToken` is called for each text delta so the UI can render incrementally.
 export function useChat() {
-  return useMutation({
-    mutationFn: sendChatMessage,
-  });
+  const [isPending, setIsPending] = useState(false);
+
+  const send = useCallback(async ({ prompt, history, onToken }) => {
+    setIsPending(true);
+    try {
+      return await sendChatMessage({ prompt, history, onToken });
+    } finally {
+      setIsPending(false);
+    }
+  }, []);
+
+  return { send, isPending };
 }

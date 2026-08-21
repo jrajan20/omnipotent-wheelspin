@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Paper,
   Stack,
@@ -40,11 +40,13 @@ const GREETING = {
     "Hi! Tell me a topic and I'll build a spinnable list — try \"dinner ideas\", \"weekend activities\", or \"team names\".",
 };
 
+// Unique sentinel id for the streaming placeholder bubble.
+const STREAMING_ID = '__streaming__';
+
 export function ChatPanel({ onList }) {
   const [messages, setMessages] = useState([GREETING]);
   const [input, setInput] = useState('');
-  const chat = useChat();
-  const loading = chat.isPending;
+  const { send, isPending } = useChat();
   const viewport = useRef(null);
 
   useEffect(() => {
@@ -52,24 +54,52 @@ export function ChatPanel({ onList }) {
       top: viewport.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [messages, loading]);
+  }, [messages]);
 
-  const send = async () => {
+  const send_ = useCallback(async () => {
     const prompt = input.trim();
-    if (!prompt || loading) return;
+    if (!prompt || isPending) return;
     setInput('');
-    const history = messages.map((m) => ({ role: m.role, text: m.text }));
-    setMessages((m) => [...m, { role: 'user', text: prompt }]);
+
+    // Snapshot history (excluding the static greeting) before appending the
+    // new user message — trimming to last 8 happens in the data layer.
+    const history = messages
+      .slice(1) // drop GREETING
+      .map((m) => ({ role: m.role, text: m.text }));
+
+    // Immediately show the user's message and an empty streaming bubble.
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', text: prompt },
+      { role: 'assistant', text: '', id: STREAMING_ID },
+    ]);
 
     try {
-      const data = await chat.mutateAsync({ prompt, history });
+      const data = await send({
+        prompt,
+        history,
+        // Each token delta: append to the streaming bubble in real time.
+        onToken: (delta) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === STREAMING_ID ? { ...m, text: m.text + delta } : m,
+            ),
+          );
+        },
+      });
 
+      // Stream finished — replace the streaming bubble with the final message.
       const botText =
         data?.message ||
         (data?.canCreateWheel
           ? `Here's a wheel for "${data.title}".`
           : "I couldn't make a wheel from that. Try a topic with several choices.");
-      setMessages((m) => [...m, { role: 'assistant', text: botText }]);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === STREAMING_ID ? { role: 'assistant', text: botText } : m,
+        ),
+      );
 
       if (
         data?.canCreateWheel &&
@@ -79,18 +109,21 @@ export function ChatPanel({ onList }) {
         onList({ title: data.title, labels: data.items });
       }
     } catch (e) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: 'assistant',
-          text: `⚠️ ${
-            e.message ||
-            'The Wheelspin Bot is unavailable right now. You can still add options manually.'
-          }`,
-        },
-      ]);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === STREAMING_ID
+            ? {
+                role: 'assistant',
+                text:
+                  '\u26a0\ufe0f ' +
+                  (e.message ||
+                    'The Wheelspin Bot is unavailable right now. You can still add options manually.'),
+              }
+            : m,
+        ),
+      );
     }
-  };
+  }, [input, isPending, messages, send, onList]);
 
   return (
     <Paper
@@ -112,7 +145,7 @@ export function ChatPanel({ onList }) {
         <Stack gap="sm" p="xs">
           {messages.map((m, i) => (
             <Group
-              key={i}
+              key={m.id ?? i}
               align="flex-start"
               wrap="nowrap"
               justify={m.role === 'user' ? 'flex-end' : 'flex-start'}
@@ -134,20 +167,11 @@ export function ChatPanel({ onList }) {
                 }
               >
                 <Text size="sm" c={m.role === 'user' ? 'white' : undefined}>
-                  {m.text}
+                  {m.text || (m.id === STREAMING_ID ? <Loader size="xs" color="grape" /> : null)}
                 </Text>
               </Paper>
             </Group>
           ))}
-
-          {loading && (
-            <Group gap="xs">
-              <Loader size="sm" color="grape" />
-              <Text size="sm" c="dimmed">
-                Thinking…
-              </Text>
-            </Group>
-          )}
         </Stack>
       </ScrollArea>
 
@@ -157,15 +181,15 @@ export function ChatPanel({ onList }) {
           placeholder="Ask for a list…"
           value={input}
           onChange={(e) => setInput(e.currentTarget.value)}
-          onKeyDown={(e) => e.key === 'Enter' && send()}
-          disabled={loading}
+          onKeyDown={(e) => e.key === 'Enter' && send_()}
+          disabled={isPending}
         />
         <ActionIcon
           size={36}
           variant="filled"
           color="grape"
-          onClick={send}
-          loading={loading}
+          onClick={send_}
+          loading={isPending}
           aria-label="Send message"
         >
           <IconSend size={18} />
