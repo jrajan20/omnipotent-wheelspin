@@ -3,9 +3,9 @@
 // Deploy:  npx supabase functions deploy chat
 // Secret:  npx supabase secrets set GEMINI_API_KEY=your-key
 //
-// It returns structured JSON: { canCreateWheel, title, items[], message }.
-// When the user's prompt cannot become a spinnable list, canCreateWheel is
-// false and `message` explains why — the UI shows that message in the chat.
+// Streams an SSE response of text tokens. The final token(s) contain a JSON
+// object: { canCreateWheel, title, items[], message }. The client reads the
+// stream, accumulates text, and parses the JSON fence when the stream ends.
 
 // Ambient typings for the Deno runtime so this function type-checks in a plain
 // (non-Deno) editor. Deno provides these globals natively at runtime.
@@ -15,10 +15,11 @@ declare const Deno: {
 };
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const MODEL = 'gemini-3.6-flash';
-const INTERACTIONS_URL =
-  'https://generativelanguage.googleapis.com/v1beta/interactions';
-const API_REVISION = '2026-05-20';
+// gemini-2.0-flash-lite: faster and cheaper than gemini-3.6-flash for simple
+// list-generation tasks. TTFT is significantly lower.
+const MODEL = 'gemini-2.0-flash-lite';
+const GENERATE_URL =
+  `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,6 +54,8 @@ function crisisResponse() {
   };
 }
 
+// The system prompt instructs the model to output a JSON object directly.
+// No response_format/schema is used so the model can stream tokens freely.
 const SYSTEM_PROMPT = `You are "Wheelspin Bot" for an app called Omnipotent Wheelspin.
 Your ONLY job is to turn a user's request into a list of concise, spinnable options for a prize wheel.
 
@@ -61,7 +64,8 @@ Rules:
 - If the request cannot reasonably become a list of options (e.g. "what's the weather?", "who are you?", a factual question, a greeting, or anything with a single answer), set canCreateWheel to false and briefly explain, in a friendly tone, that a wheelspin can't be created from that prompt. Suggest they try a topic like "dinner ideas".
 - Never produce unsafe, hateful, or explicit options.
 - The "title" should be a short name for the wheel (e.g. "Dinner Ideas").
-Return ONLY JSON that matches the provided schema.`;
+Output ONLY a raw JSON object — no markdown fences, no extra text — with exactly these keys:
+{"canCreateWheel": boolean, "title": string, "items": string[], "message": string}`;
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -70,25 +74,26 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-// Pull the model's final text (our JSON string) out of the Interactions API
-// `steps` timeline — the Interactions API has no `candidates` array.
-function outputTextFromInteraction(payload: {
-  steps?: Array<{
-    type?: string;
-    content?: Array<{ type?: string; text?: string }>;
-  }>;
-}) {
-  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
-  for (let i = steps.length - 1; i >= 0; i--) {
-    const step = steps[i];
-    if (step?.type === 'model_output' && Array.isArray(step.content)) {
-      const part = step.content.find(
-        (c) => c?.type === 'text' && typeof c.text === 'string',
-      );
-      if (part?.text) return part.text;
+// Extract the text delta from a streamGenerateContent SSE chunk.
+function deltaText(chunk: unknown): string {
+  if (typeof chunk !== 'object' || chunk === null) return '';
+  const c = chunk as Record<string, unknown>;
+  const candidates = Array.isArray(c.candidates) ? c.candidates : [];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'object' || candidate === null) continue;
+    const content = (candidate as Record<string, unknown>).content as
+      | Record<string, unknown>
+      | undefined;
+    if (!content) continue;
+    const parts = Array.isArray(content.parts) ? content.parts : [];
+    for (const part of parts) {
+      if (typeof part === 'object' && part !== null) {
+        const text = (part as Record<string, unknown>).text;
+        if (typeof text === 'string') return text;
+      }
     }
   }
-  return '{}';
+  return '';
 }
 
 Deno.serve(async (req) => {
@@ -116,49 +121,34 @@ Deno.serve(async (req) => {
       return jsonResponse(crisisResponse());
     }
 
-    // The Interactions API is stateless here: fold recent turns into one text
-    // input and keep the bot persona in `system_instruction`.
-    const transcript = (Array.isArray(history) ? history : [])
+    // Build the conversation as generateContent `contents` turns.
+    // Only send the last 8 turns to keep the payload small.
+    const historyTurns = (Array.isArray(history) ? history : [])
       .slice(-8)
-      .map((m: { role: string; text: string }) => {
-        const speaker = m.role === 'assistant' ? 'Assistant' : 'User';
-        return `${speaker}: ${String(m.text ?? '').trim()}`;
-      })
-      .join('\n');
-    const input = transcript ? `${transcript}\nUser: ${prompt}` : prompt;
+      .map((m: { role: string; text: string }) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: String(m.text ?? '').trim() }],
+      }));
 
     const requestBody = {
-      model: MODEL,
-      system_instruction: SYSTEM_PROMPT,
-      input,
-      store: false,
-      response_format: {
-        type: 'text',
-        mime_type: 'application/json',
-        schema: {
-          type: 'object',
-          properties: {
-            canCreateWheel: { type: 'boolean' },
-            title: { type: 'string' },
-            items: { type: 'array', items: { type: 'string' } },
-            message: { type: 'string' },
-          },
-          required: ['canCreateWheel', 'title', 'items', 'message'],
-        },
-      },
+      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      contents: [
+        ...historyTurns,
+        { role: 'user', parts: [{ text: prompt }] },
+      ],
+      generationConfig: { temperature: 0.7 },
     };
 
-    const res = await fetch(INTERACTIONS_URL, {
+    const geminiRes = await fetch(GENERATE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY,
-        'Api-Revision': API_REVISION,
       },
       body: JSON.stringify(requestBody),
     });
 
-    if (res.status === 429) {
+    if (geminiRes.status === 429) {
       return jsonResponse({
         canCreateWheel: false,
         title: '',
@@ -167,31 +157,75 @@ Deno.serve(async (req) => {
           'The Wheelspin Bot is a little busy right now — please try again in a moment.',
       });
     }
-    if (!res.ok) {
-      throw new Error(`Gemini request failed with status ${res.status}.`);
+    if (!geminiRes.ok) {
+      throw new Error(`Gemini request failed with status ${geminiRes.status}.`);
     }
 
-    const payload = await res.json();
-    const text = outputTextFromInteraction(payload);
-    const parsed = JSON.parse(text);
+    // Stream SSE from Gemini → SSE to client.
+    // Each `data:` line is forwarded as-is so the browser can display tokens
+    // incrementally. The client accumulates text and parses JSON at stream end.
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
 
-    const items = Array.isArray(parsed.items)
-      ? parsed.items
-          .map((s: unknown) => String(s).trim())
-          .filter(Boolean)
-      : [];
-    const canCreateWheel = Boolean(parsed.canCreateWheel) && items.length >= 2;
+    (async () => {
+      const reader = geminiRes.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-    return jsonResponse({
-      canCreateWheel,
-      title: String(parsed.title ?? '').slice(0, 80),
-      items: canCreateWheel ? items : [],
-      message: String(
-        parsed.message ??
-          (canCreateWheel
-            ? 'Here is your wheel!'
-            : 'I could not build a wheel from that. Try a topic like "dinner ideas".'),
-      ),
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process complete SSE lines from the buffer.
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const jsonStr = trimmed.slice(5).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+
+            let chunk: unknown;
+            try { chunk = JSON.parse(jsonStr); } catch { continue; }
+
+            const text = deltaText(chunk);
+            if (text) {
+              // Forward as an SSE data line carrying just the text delta.
+              await writer.write(
+                encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
+              );
+            }
+          }
+        }
+      } catch (_err) {
+        // Notify the client that the stream ended unexpectedly.
+        try {
+          await writer.write(
+            encoder.encode(
+              'data: ' + JSON.stringify({ error: 'Stream interrupted.' }) + '\n\n',
+            ),
+          );
+        } catch { /* writer already closed — nothing to do */ }
+      } finally {
+        // Signal end-of-stream to the client.
+        try {
+          await writer.write(encoder.encode('data: [DONE]\n\n'));
+          await writer.close();
+        } catch { /* writer already closed — nothing to do */ }
+      }
+    })();
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
     });
   } catch (error) {
     return jsonResponse({
