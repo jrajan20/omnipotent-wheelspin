@@ -56,7 +56,7 @@ export function ChatPanel({ onList }) {
     });
   }, [messages]);
 
-  const send_ = useCallback(async () => {
+  const handleSend = useCallback(async () => {
     const prompt = input.trim();
     if (!prompt || isPending) return;
     setInput('');
@@ -181,14 +181,14 @@ export function ChatPanel({ onList }) {
           placeholder="Ask for a list…"
           value={input}
           onChange={(e) => setInput(e.currentTarget.value)}
-          onKeyDown={(e) => e.key === 'Enter' && send_()}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           disabled={isPending}
         />
         <ActionIcon
           size={36}
           variant="filled"
           color="grape"
-          onClick={send_}
+          onClick={handleSend}
           loading={isPending}
           aria-label="Send message"
         >

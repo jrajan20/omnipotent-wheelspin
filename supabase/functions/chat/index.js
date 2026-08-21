@@ -188,10 +188,21 @@ Deno.serve(async (req) => {
             }
           }
         }
+      } catch (_err) {
+        // Notify the client that the stream ended unexpectedly.
+        try {
+          await writer.write(
+            encoder.encode(
+              'data: ' + JSON.stringify({ error: 'Stream interrupted.' }) + '\n\n',
+            ),
+          );
+        } catch { /* writer already closed — nothing to do */ }
       } finally {
         // Signal end-of-stream to the client.
-        await writer.write(encoder.encode('data: [DONE]\n\n'));
-        await writer.close();
+        try {
+          await writer.write(encoder.encode('data: [DONE]\n\n'));
+          await writer.close();
+        } catch { /* writer already closed — nothing to do */ }
       }
     })();
 
