@@ -30,12 +30,20 @@ export function AuthModal({ opened, onClose }) {
         notifications.show({ color: 'green', message: 'Welcome back!' });
         onClose();
       } else {
-        await signUp.mutateAsync({ email, password, username });
-        notifications.show({
-          color: 'green',
-          title: 'Account created',
-          message: 'Check your email to confirm, then sign in.',
-        });
+        const result = await signUp.mutateAsync({ email, password, username });
+        if (result?.alreadyExists) {
+          notifications.show({
+            color: 'yellow',
+            title: 'Account already exists',
+            message: 'An account with this email already exists. Please sign in instead.',
+          });
+        } else {
+          notifications.show({
+            color: 'green',
+            title: 'Account created',
+            message: 'Check your email to confirm, then sign in.',
+          });
+        }
         setTab('signin');
       }
     } catch (e) {
