@@ -18,7 +18,12 @@ export async function signUpWithPassword({ email, password, username }) {
     options: { data: { username } },
   });
   if (error) throw error;
-  return data;
+  // Supabase does not throw when signing up with an already-registered email
+  // (to prevent enumeration). Instead it returns a user with an empty
+  // `identities` array for a confirmed existing account.
+  const alreadyExists =
+    data?.user != null && Array.isArray(data.user.identities) && data.user.identities.length === 0;
+  return { ...data, alreadyExists };
 }
 
 export async function changePassword({ password }) {

@@ -8,6 +8,76 @@
 // false and `message` explains why — the UI shows that message in the chat.
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+// Used to verify Supabase JWTs so rate-limit keys cannot be forged.
+const SUPABASE_JWT_SECRET = Deno.env.get('SUPABASE_JWT_SECRET');
+
+// ---------------------------------------------------------------------------
+// In-memory rate limiter — per user (JWT sub) or per IP as fallback.
+// This is best-effort: each edge-function instance has its own Map and cold
+// starts reset it. For a multi-instance or persistent limit, back this with
+// a shared store (e.g. Supabase Postgres or Redis).
+// ---------------------------------------------------------------------------
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX = 10;           // max requests per window
+const rateLimitMap = new Map();      // key → { count, windowStart }
+
+// Verify a Supabase JWT (HS256) and return the `sub` claim, or null if invalid.
+async function getVerifiedSub(token) {
+  if (!SUPABASE_JWT_SECRET || !token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(SUPABASE_JWT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    );
+    // base64url → base64 → ArrayBuffer
+    const sig = Uint8Array.from(
+      atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')),
+      (c) => c.charCodeAt(0),
+    );
+    const valid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      sig,
+      enc.encode(`${parts[0]}.${parts[1]}`),
+    );
+    if (!valid) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload?.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getRateLimitKey(req) {
+  // Prefer the verified authenticated user's JWT subject (per account).
+  const authHeader = req.headers.get('authorization') ?? '';
+  const token = authHeader.replace(/^bearer\s+/i, '').trim();
+  if (token) {
+    const sub = await getVerifiedSub(token);
+    if (sub) return `user:${sub}`;
+  }
+  // Fall back to client IP for unauthenticated or invalid tokens.
+  const ip =
+    req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  return `ip:${ip}`;
+}
+
+function isRateLimited(key) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now - entry.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    rateLimitMap.set(key, { count: 1, windowStart: now });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > RATE_LIMIT_MAX;
+}
 const MODEL = 'gemini-3.6-flash';
 const INTERACTIONS_URL =
   'https://generativelanguage.googleapis.com/v1beta/interactions';
@@ -61,6 +131,21 @@ function outputTextFromInteraction(payload: {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // Per-user / per-IP rate limiting (10 requests per minute).
+  const rateLimitKey = await getRateLimitKey(req);
+  if (isRateLimited(rateLimitKey)) {
+    return jsonResponse(
+      {
+        canCreateWheel: false,
+        title: '',
+        items: [],
+        message:
+          "You're sending messages too quickly — please wait a moment and try again.",
+      },
+      429,
+    );
   }
 
   try {
