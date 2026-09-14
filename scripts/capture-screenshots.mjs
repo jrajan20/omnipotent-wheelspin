@@ -6,20 +6,39 @@
 //
 // Screenshots are written to docs/screenshots/. Several screens (Builder,
 // winner modal, guest shared wheel, auth modal, mobile) render without a real
-// Supabase backend, so a demo .env is enough.
+// Supabase backend, so a demo .env is enough. The Profile screen additionally
+// signs in, so it needs a real Supabase project plus valid credentials — set
+// SCREENSHOT_EMAIL / SCREENSHOT_PASSWORD (see CREDENTIALS below).
 
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const BASE_URL = process.env.BASE_URL ?? 'http://localhost:5173';
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Load variables from the project's .env (e.g. SCREENSHOT_EMAIL / _PASSWORD).
+// Available in Node 20.12+; ignore if the file is missing.
+try {
+  process.loadEnvFile(resolve(__dirname, '..', '.env'));
+} catch {
+  /* no .env — rely on the ambient environment instead */
+}
+
+const BASE_URL = process.env.BASE_URL ?? 'http://localhost:5173';
 const OUT_DIR = resolve(__dirname, '..', 'docs', 'screenshots');
 
 const WHEEL = {
   title: 'Friday Night Dinner',
   labels: ['Pizza', 'Sushi', 'Tacos', 'Ramen', 'Burgers', 'Thai', 'Salad', 'BBQ'],
+};
+
+// Credentials used to capture signed-in screens (the Profile page). Set these in
+// the gitignored .env (SCREENSHOT_EMAIL / SCREENSHOT_PASSWORD) or the environment
+// so real credentials never live in source control.
+const CREDENTIALS = {
+  email: process.env.SCREENSHOT_EMAIL ?? '',
+  password: process.env.SCREENSHOT_PASSWORD ?? '',
 };
 
 // Distinct HSL colors, mirroring src/utils/wheels.js output format.
@@ -66,6 +85,27 @@ async function populateWheel(page) {
   }
   // Let the wheel + list settle.
   await page.waitForTimeout(600);
+}
+
+// Sign in through the auth modal so signed-in screens (e.g. Profile) can render.
+// Throws if the modal doesn't close, which indicates the sign-in failed.
+async function signIn(page, email, password) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Sign in' }).first().click();
+
+  const dialog = page.getByRole('dialog');
+  await dialog.getByText('Welcome to Omnipotent Wheelspin').waitFor();
+  // Target the inputs by role: this excludes Mantine's "Toggle password
+  // visibility" button (which also carries "password" in its aria-label) and
+  // tolerates the required-field asterisk in the label text.
+  await dialog.getByRole('textbox', { name: 'Email' }).fill(email);
+  await dialog.getByRole('textbox', { name: 'Password' }).fill(password);
+  await dialog.getByRole('button', { name: 'Sign in', exact: true }).click();
+
+  // On a successful sign-in the modal closes automatically and the navbar
+  // swaps the "Sign in" button for the account avatar.
+  await dialog.waitFor({ state: 'detached', timeout: 15000 });
+  await page.waitForTimeout(400);
 }
 
 async function run() {
@@ -117,6 +157,39 @@ async function run() {
   await page.waitForTimeout(500);
   await page.screenshot({ path: resolve(OUT_DIR, 'shared-wheel.png'), fullPage: true });
   console.log('✓ shared-wheel.png');
+
+  // 6. Profile — signed-in account page (saved wheels + account settings).
+  if (!CREDENTIALS.email || !CREDENTIALS.password) {
+    console.warn(
+      '⚠ Skipped Profile screenshots — set SCREENSHOT_EMAIL and SCREENSHOT_PASSWORD ' +
+        '(e.g. in .env) to capture the signed-in Profile page.',
+    );
+  } else {
+    try {
+      await signIn(page, CREDENTIALS.email, CREDENTIALS.password);
+      await page.goto(`${BASE_URL}/profile`, { waitUntil: 'networkidle' });
+      await page.getByRole('heading', { name: 'Profile' }).waitFor({ timeout: 10000 });
+
+      // Capture each Profile tab: saved wheels, change password, delete account.
+      const tabs = [
+        ['Saved wheels', 'profile-wheels.png'],
+        ['Change password', 'profile-password.png'],
+        ['Delete account', 'profile-delete.png'],
+      ];
+      for (const [tabName, file] of tabs) {
+        await page.getByRole('tab', { name: tabName }).click();
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: resolve(OUT_DIR, file), fullPage: true });
+        console.log(`✓ ${file}`);
+      }
+    } catch (err) {
+      console.warn(
+        '⚠ Skipped Profile screenshots — sign-in failed. Check SCREENSHOT_EMAIL / ' +
+          'SCREENSHOT_PASSWORD and that .env points at a real Supabase project.\n  ' +
+          (err?.message ?? err),
+      );
+    }
+  }
 
   await desktop.close();
 

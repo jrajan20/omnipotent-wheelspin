@@ -137,10 +137,20 @@ Spinning the wheel picks a winner and celebrates with confetti.
 
 ### Profile — your saved wheels & account
 
-Signed‑in users get a Profile page to revisit and share saved wheels, change their
-password, or delete their account.
+Signed‑in users get a Profile page with three tabs: revisit and share saved wheels,
+change their password, or delete their account.
 
-![Profile](docs/screenshots/profile.png)
+**Saved wheels**
+
+![Profile — saved wheels](docs/screenshots/profile-wheels.png)
+
+**Change password**
+
+![Profile — change password](docs/screenshots/profile-password.png)
+
+**Delete account**
+
+![Profile — delete account](docs/screenshots/profile-delete.png)
 
 ### Shared wheel
 
