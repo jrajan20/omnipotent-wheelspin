@@ -2,31 +2,36 @@
 
 **Omnipotent Wheelspin** is a delightful, AI‑powered decision‑making app. Describe
 what you're deciding — _"dinner ideas"_, _"weekend activities"_, _"team names"_ — and
-an AI chatbot instantly turns it into a colorful, spinnable prize wheel. Add or remove
-options by hand, give the wheel a spin, and let it pick for you. Sign in to save your
-wheels and share any of them with a public link so friends can spin too.
-
-<p align="center">
-  <img src="docs/screenshots/builder-wheel.png" alt="Omnipotent Wheelspin builder with a populated wheel" width="850">
-</p>
+an AI chatbot streams back a colorful, spinnable prize wheel. Add or remove options by
+hand, give the wheel a spin, and let it pick for you. Share any wheel with a link —
+either as a guest (the wheel is encoded straight into the URL, no account needed) or by
+signing in to save wheels to your profile and publish public share links friends can spin.
 
 ---
 
 ## ✨ Features
 
 - **AI list builder** — Chat with the "Wheelspin Bot" and it generates a ready‑to‑spin
-  list from any topic, powered by Google Gemini.
+  list from any topic, powered by Google Gemini. Responses **stream in token‑by‑token**.
 - **Manual editing** — Add, remove, or clear options; each slice gets a distinct,
-  auto‑generated color so no two wedges look alike.
-- **Animated spinning wheel** — A physics‑style roulette with a winner reveal and
+  auto‑generated HSL color kept as far as possible from the colors already in use.
+- **Animated spinning wheel** — A physics‑style roulette with a winner reveal and a
   confetti celebration.
-- **Save your wheels** — Create an account to persist wheels to your personal dashboard.
-- **Share links** — Publish any wheel to a public URL (`/w/:shareId`) that anyone can
-  open and spin. Spin counts are tracked.
-- **Light & dark mode** — Theme toggle built in, defaulting to a rich dark theme.
+- **Share two ways** — Signed‑in users publish a wheel to a public URL (`/w/:shareId`)
+  with a tracked spin count. Guests get an account‑free link (`/w/local#…`) that encodes
+  the whole wheel in the URL — no sign‑in and nothing stored server‑side.
+- **Save your wheels** — Create an account to persist wheels and manage them from your
+  profile.
+- **Account management** — Change your password or permanently delete your account (and
+  all your data) from the Profile page.
+- **Safety first** — The chatbot screens prompts for self‑harm language and responds with
+  crisis‑support resources instead of forwarding them to the AI. The Gemini API key never
+  leaves the server.
+- **Privacy policy** — A built‑in `/privacy` page, linked from the footer.
+- **Light & dark mode** — Theme toggle built in.
 - **Fully responsive** — Works across phones, tablets, laptops, and large monitors.
 - **Secure by design** — Row Level Security keeps every user's private wheels private,
-  and the Gemini API key never leaves the server.
+  while anyone can read a wheel once it's been made public.
 
 ---
 
@@ -47,12 +52,12 @@ wheels and share any of them with a public link so friends can spin too.
 
 ### Backend & Infrastructure
 
-| Area                | Technology                                                                            |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| Database & Auth     | [Supabase](https://supabase.com/) (PostgreSQL, Auth, Row Level Security)              |
-| Serverless AI proxy | [Supabase Edge Functions](https://supabase.com/docs/guides/functions) (Deno)          |
-| AI model            | [Google Gemini](https://ai.google.dev/) (`gemini-3.6-flash`) via the Interactions API |
-| Hosting             | [Vercel](https://vercel.com/) (SPA rewrites)                                          |
+| Area                 | Technology                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| Database & Auth      | [Supabase](https://supabase.com/) (PostgreSQL, Auth, Row Level Security)                          |
+| Serverless functions | [Supabase Edge Functions](https://supabase.com/docs/guides/functions) (Deno): `chat`, `delete-account` |
+| AI model             | [Google Gemini](https://ai.google.dev/) (`gemini-2.0-flash-lite`), streamed to the browser via SSE |
+| Hosting              | [Vercel](https://vercel.com/) (SPA rewrites)                                                      |
 
 ### Tooling
 
@@ -67,22 +72,25 @@ wheels and share any of them with a public link so friends can spin too.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│                    React SPA (Vite)                         │
+│                     React SPA (Vite)                        │
 │                                                             │
-│  Pages:  Builder (/)   Dashboard (/dashboard)   Shared (/w) │
+│  Pages:  Builder (/)          Profile (/profile)            │
+│          Shared (/w/:shareId) Privacy (/privacy)            │
 │  State:  TanStack React Query  •  AuthProvider (context)    │
 └───────────────┬──────────────────────────┬─────────────────┘
-                │                          │
-        chat prompt/response        CRUD + auth (RLS)
-                │                          │
-        ┌───────▼────────┐        ┌────────▼─────────┐
-        │ Supabase Edge  │        │    Supabase      │
-        │ Function `chat`│        │  Postgres + Auth │
-        └───────┬────────┘        └──────────────────┘
+                │                           │
+     chat prompt (SSE stream)        CRUD + auth (RLS)
+                │                           │
+        ┌───────▼─────────┐        ┌────────▼─────────┐
+        │  Supabase Edge  │        │    Supabase      │
+        │   Functions:    │        │  Postgres + Auth │
+        │  chat •         │        └──────────────────┘
+        │  delete-account │
+        └───────┬─────────┘
                 │
         ┌───────▼────────┐
         │  Google Gemini │
-        │  Interactions  │
+        │ 2.0-flash-lite │
         └────────────────┘
 ```
 
@@ -91,55 +99,16 @@ Key design decisions:
 - **Data access is centralized.** Components never call the Supabase client directly.
   All reads and writes go through TanStack React Query hooks (`src/hooks/`) that wrap
   data‑access functions (`src/utils/`).
-- **The AI key stays server‑side.** The browser calls a Supabase Edge Function, which
-  holds the `GEMINI_API_KEY` secret and talks to Gemini. The key never ships in the
-  client bundle.
+- **The AI key stays server‑side.** The browser calls the `chat` Edge Function, which
+  holds the `GEMINI_API_KEY` secret, screens the prompt, and streams Gemini's tokens back
+  as Server‑Sent Events. The key never ships in the client bundle.
+- **Account deletion runs with elevated privileges.** The `delete-account` Edge Function
+  verifies the caller's JWT and uses the Supabase service‑role key to remove the auth user
+  and all their data (cascading to their wheels).
+- **Guests need no account.** A guest share link encodes the wheel (title + options) into
+  the URL hash, so it can be opened and spun without ever touching the database.
 - **Row Level Security enforces ownership.** A user can only see and modify their own
   wheels, while anyone can read a wheel once it's been made public via a share link.
-
----
-
-## 📸 Screenshots
-
-### Builder — the home page
-
-Chat with the AI on the left, curate options in the middle, and spin the wheel on the right.
-
-| Empty state                                          | With a generated wheel                                    |
-| ---------------------------------------------------- | --------------------------------------------------------- |
-| ![Empty builder](docs/screenshots/builder-empty.png) | ![Builder with wheel](docs/screenshots/builder-wheel.png) |
-
-### Winner reveal
-
-Spinning the wheel picks a winner and celebrates with confetti.
-
-![Winner modal](docs/screenshots/result-modal.png)
-
-### Dashboard — your saved wheels
-
-Signed‑in users get a personal dashboard to revisit, share, or delete their wheels.
-
-![Dashboard](docs/screenshots/dashboard.png)
-
-### Shared wheel
-
-Any published wheel is reachable at a public `/w/:shareId` link — no account required to spin.
-
-![Shared wheel](docs/screenshots/shared-wheel.png)
-
-### Authentication
-
-Email + password sign‑in and account creation via a Mantine modal.
-
-![Auth modal](docs/screenshots/auth-modal.png)
-
-### Responsive on mobile
-
-The three‑panel builder stacks gracefully on small screens.
-
-<p align="center">
-  <img src="docs/screenshots/mobile-builder.png" alt="Mobile builder" width="320">
-</p>
 
 ---
 
@@ -184,15 +153,19 @@ npx supabase link --project-ref YOUR-PROJECT-REF
 npx supabase db push
 ```
 
-### 4. Deploy the AI Edge Function
+### 4. Deploy the Edge Functions
 
 ```bash
-# Store the Gemini key as a server-side secret
+# Store the Gemini key as a server-side secret (used by the chat function)
 npx supabase secrets set GEMINI_API_KEY=your-gemini-key
 
-# Deploy the chatbot function
+# Deploy the functions
 npx supabase functions deploy chat
+npx supabase functions deploy delete-account
 ```
+
+> `delete-account` uses `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, which Supabase
+> injects into every Edge Function automatically — no extra secret to set.
 
 ### 5. Run the app
 
@@ -219,31 +192,34 @@ The app runs at [http://localhost:5173](http://localhost:5173).
 
 ```
 .
-├── public/                     # Static assets
+├── public/                     # Static assets (favicon, icons)
 ├── src/
-│   ├── App.jsx                 # App shell + routes
+│   ├── App.jsx                 # App shell, routes, footer, config banner
 │   ├── main.jsx                # Providers (Mantine, React Query, Router, Auth)
 │   ├── theme.js                # Mantine theme (grape primary color)
 │   ├── auth/
 │   │   └── AuthProvider.jsx    # Supabase auth session context
 │   ├── components/
 │   │   ├── Navbar.jsx          # Top bar: brand, theme toggle, account menu
-│   │   ├── ChatPanel.jsx       # AI "Wheelspin Bot" chat
+│   │   ├── Logo.jsx            # Wheel brand mark
+│   │   ├── ChatPanel.jsx       # Streaming AI "Wheelspin Bot" chat
 │   │   ├── ItemList.jsx        # Add/remove/clear wheel options
 │   │   ├── WheelCanvas.jsx     # The spinning wheel + winner modal
-│   │   ├── Confetti.jsx        # Winner celebration
-│   │   └── AuthModal.jsx       # Sign in / create account
+│   │   ├── Confetti.jsx        # Winner celebration (Framer Motion)
+│   │   └── AuthModal.jsx       # Sign in / create account (email + password)
 │   ├── pages/
-│   │   ├── Builder.jsx         # Home: build + spin a wheel
-│   │   ├── Dashboard.jsx       # Saved wheels for the signed-in user
-│   │   └── SharedWheel.jsx     # Public wheel by share link
+│   │   ├── Builder.jsx         # Home: build, spin, save & share a wheel
+│   │   ├── Profile.jsx         # Saved wheels, change password, delete account
+│   │   ├── SharedWheel.jsx     # Public (/w/:shareId) & guest (/w/local#…) wheels
+│   │   └── PrivacyPolicy.jsx   # Privacy policy (/privacy)
 │   ├── hooks/                  # TanStack React Query hooks
-│   └── utils/                  # Supabase client + data-access functions
+│   └── utils/                  # Supabase client, data access, wheel/color/share helpers
 ├── supabase/
 │   ├── config.toml
-│   ├── functions/chat/         # Gemini-backed Edge Function (Deno)
+│   ├── functions/
+│   │   ├── chat/               # Gemini-backed streaming chatbot (Deno)
+│   │   └── delete-account/     # Account deletion via service role (Deno)
 │   └── migrations/             # SQL schema + RLS policies
-├── docs/screenshots/           # Images used in this README
 ├── vercel.json                 # SPA rewrite rules
 └── vite.config.js
 ```
@@ -252,12 +228,16 @@ The app runs at [http://localhost:5173](http://localhost:5173).
 
 ## 🗄️ Data Model
 
-**`profiles`** — one row per authenticated user, created automatically on signup.
+**`profiles`** — one row per authenticated user, created automatically on signup. Stores
+an optional `username` (a display name chosen at sign‑up, defaulting to the email prefix).
 
 **`wheels`** — a saved wheelspin. Options are stored as a JSONB array of
-`{ id, label, color }` objects. Each wheel has an opaque `share_id` used for public
-share links, plus a `spin_count`. Row Level Security ensures owners manage their own
-wheels while anyone can read a wheel that has been made public.
+`{ id, label, color }` objects. Each wheel has an opaque `share_id` used for public share
+links, an `is_public` flag, and a `spin_count`. Row Level Security ensures owners manage
+their own wheels while anyone can read a wheel that has been made public.
+
+**Guest wheels** are never stored in the database — they live entirely in the share
+link's URL hash (`/w/local#…`), decoded client‑side when the link is opened.
 
 ---
 
