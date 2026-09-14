@@ -135,6 +135,13 @@ Spinning the wheel picks a winner and celebrates with confetti.
 
 ![Winner modal](docs/screenshots/result-modal.png)
 
+### Profile — your saved wheels & account
+
+Signed‑in users get a Profile page to revisit and share saved wheels, change their
+password, or delete their account.
+
+![Profile](docs/screenshots/profile.png)
+
 ### Shared wheel
 
 Guest share links encode the wheel straight into the URL (`/w/local#…`) — no account
