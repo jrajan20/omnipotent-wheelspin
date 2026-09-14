@@ -7,6 +7,10 @@ hand, give the wheel a spin, and let it pick for you. Share any wheel with a lin
 either as a guest (the wheel is encoded straight into the URL, no account needed) or by
 signing in to save wheels to your profile and publish public share links friends can spin.
 
+<p align="center">
+  <img src="docs/screenshots/builder-wheel.png" alt="Omnipotent Wheelspin builder with a populated wheel" width="850">
+</p>
+
 ---
 
 ## ✨ Features
@@ -112,6 +116,48 @@ Key design decisions:
 
 ---
 
+## 📸 Screenshots
+
+> Regenerate these at any time with `npm run screenshots` (see below) — the images are
+> written to `docs/screenshots/`.
+
+### Builder — the home page
+
+Chat with the AI on the left, curate options in the middle, and spin the wheel on the right.
+
+| Empty state                                          | With a generated wheel                                    |
+| ---------------------------------------------------- | --------------------------------------------------------- |
+| ![Empty builder](docs/screenshots/builder-empty.png) | ![Builder with wheel](docs/screenshots/builder-wheel.png) |
+
+### Winner reveal
+
+Spinning the wheel picks a winner and celebrates with confetti.
+
+![Winner modal](docs/screenshots/result-modal.png)
+
+### Shared wheel
+
+Guest share links encode the wheel straight into the URL (`/w/local#…`) — no account
+required to open and spin.
+
+![Shared wheel](docs/screenshots/shared-wheel.png)
+
+### Authentication
+
+Email + password sign‑in and account creation via a Mantine modal.
+
+![Auth modal](docs/screenshots/auth-modal.png)
+
+### Responsive on mobile
+
+The three‑panel builder stacks gracefully on small screens.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-builder.png" alt="Mobile builder" width="320">
+</p>
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -186,6 +232,24 @@ The app runs at [http://localhost:5173](http://localhost:5173).
 | `npm run preview` | Preview the production build locally |
 | `npm run lint`    | Run ESLint across the project        |
 
+### Capturing README screenshots
+
+The images above are generated from the running app with [Playwright](https://playwright.dev/):
+
+```bash
+# One-time: install the Playwright browser
+npx playwright install chromium
+
+# Terminal 1 — start the app
+npm run dev
+
+# Terminal 2 — capture screenshots into docs/screenshots/
+npm run screenshots
+```
+
+The Builder, winner modal, guest shared wheel, auth modal, and mobile views all render
+without a real Supabase backend, so the demo `.env` values are enough to capture them.
+
 ---
 
 ## 📁 Project Structure
@@ -220,6 +284,9 @@ The app runs at [http://localhost:5173](http://localhost:5173).
 │   │   ├── chat/               # Gemini-backed streaming chatbot (Deno)
 │   │   └── delete-account/     # Account deletion via service role (Deno)
 │   └── migrations/             # SQL schema + RLS policies
+├── scripts/
+│   └── capture-screenshots.mjs # Playwright script behind `npm run screenshots`
+├── docs/screenshots/           # Generated images used in this README
 ├── vercel.json                 # SPA rewrite rules
 └── vite.config.js
 ```
