@@ -8,9 +8,9 @@
 // stream, accumulates text, and parses the JSON fence when the stream ends.
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-// gemini-2.0-flash-lite: faster and cheaper than gemini-3.6-flash for simple
-// list-generation tasks. TTFT is significantly lower.
-const MODEL = 'gemini-2.0-flash-lite';
+// gemini-3.5-flash-lite: faster and cheaper than the full Flash models for
+// simple list-generation tasks, and available on the free tier.
+const MODEL = 'gemini-3.5-flash-lite';
 const GENERATE_URL =
   `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:streamGenerateContent?alt=sse`;
 
@@ -123,7 +123,7 @@ Deno.serve(async (req) => {
         ...historyTurns,
         { role: 'user', parts: [{ text: prompt }] },
       ],
-      generationConfig: { temperature: 0.7 },
+      generationConfig: { thinkingConfig: { thinkingLevel: 'low' } },
     };
 
     const geminiRes = await fetch(GENERATE_URL, {

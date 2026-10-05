@@ -60,7 +60,7 @@ signing in to save wheels to your profile and publish public share links friends
 | -------------------- | ------------------------------------------------------------------------------------------------ |
 | Database & Auth      | [Supabase](https://supabase.com/) (PostgreSQL, Auth, Row Level Security)                          |
 | Serverless functions | [Supabase Edge Functions](https://supabase.com/docs/guides/functions) (Deno): `chat`, `delete-account` |
-| AI model             | [Google Gemini](https://ai.google.dev/) (`gemini-2.0-flash-lite`), streamed to the browser via SSE |
+| AI model             | [Google Gemini](https://ai.google.dev/) (`gemini-3.5-flash-lite`), streamed to the browser via SSE |
 | Hosting              | [Vercel](https://vercel.com/) (SPA rewrites)                                                      |
 
 ### Tooling
